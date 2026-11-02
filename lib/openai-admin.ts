@@ -118,11 +118,30 @@ export async function getApiKeys(projects: Project[], fresh = false): Promise<Ap
   return perProject.flat();
 }
 
+// The API refuses group_by=api_key_id before a cutoff ("Try a start_time on or after N").
+// Older days are fetched without it, so their cost rows carry no API key.
+const KEY_GROUPING_ERROR = /api_key_id is not available[\s\S]*on or after (\d+)/;
+
 export async function getCosts(startTime: number, endTime: number, fresh = false): Promise<CostRow[]> {
+  try {
+    return await fetchCosts(startTime, endTime, true, fresh);
+  } catch (error) {
+    const cutoff = Number(KEY_GROUPING_ERROR.exec(error instanceof Error ? error.message : "")?.[1]);
+    if (!cutoff || cutoff <= startTime) throw error;
+    const split = Math.min(cutoff, endTime);
+    const [older, newer] = await Promise.all([
+      fetchCosts(startTime, split, false, fresh),
+      split < endTime ? fetchCosts(split, endTime, true, fresh) : Promise.resolve([]),
+    ]);
+    return [...older, ...newer];
+  }
+}
+
+async function fetchCosts(startTime: number, endTime: number, byKey: boolean, fresh: boolean): Promise<CostRow[]> {
   type Raw = {
     amount: { value: number | string };
     project_id: string | null;
-    api_key_id: string | null;
+    api_key_id?: string | null;
     line_item: string | null;
     quantity: number | null;
   };
@@ -132,7 +151,7 @@ export async function getCosts(startTime: number, endTime: number, fresh = false
       start_time: startTime,
       end_time: endTime,
       bucket_width: "1d",
-      group_by: ["project_id", "api_key_id", "line_item"],
+      group_by: byKey ? ["project_id", "api_key_id", "line_item"] : ["project_id", "line_item"],
       limit: 180,
     },
     fresh,
@@ -142,33 +161,13 @@ export async function getCosts(startTime: number, endTime: number, fresh = false
     b.results.map((r) => ({
       date: day(b.start_time),
       projectId: r.project_id,
-      apiKeyId: r.api_key_id,
+      apiKeyId: r.api_key_id ?? null,
       lineItem: r.line_item ?? "Unattributed",
       ...parseLineItem(r.line_item),
       amount: Number(r.amount.value) || 0,
       quantity: r.quantity,
     }))
   );
-}
-
-// Lighter cost query (no grouping) used for balance and month-to-date totals.
-export async function getCostTotal(startTime: number, endTime: number, fresh = false) {
-  type Raw = { amount: { value: number | string }; project_id: string | null };
-  const buckets = await getAll<Bucket<Raw>>(
-    "/organization/costs",
-    { start_time: startTime, end_time: endTime, bucket_width: "1d", group_by: ["project_id"], limit: 180 },
-    fresh,
-    "page"
-  );
-  let total = 0;
-  const byProject: Record<string, number> = {};
-  for (const r of buckets.flatMap((b) => b.results)) {
-    const value = Number(r.amount.value) || 0;
-    total += value;
-    const id = r.project_id ?? "unknown";
-    byProject[id] = (byProject[id] ?? 0) + value;
-  }
-  return { total, byProject };
 }
 
 const MODEL_GROUPED: UsageCategory[] = [

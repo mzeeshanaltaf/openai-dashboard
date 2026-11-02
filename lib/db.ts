@@ -27,6 +27,16 @@ function getDb() {
       scope TEXT PRIMARY KEY,
       monthly_usd REAL NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS cost_days (
+      date TEXT PRIMARY KEY,
+      rows TEXT NOT NULL,
+      final INTEGER NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS usage_days (
+      date TEXT PRIMARY KEY,
+      rows TEXT NOT NULL,
+      final INTEGER NOT NULL
+    );
   `);
   return db;
 }
@@ -70,6 +80,27 @@ export function listBudgets(): Budget[] {
     monthly_usd: number;
   }[];
   return rows.map((r) => ({ scope: r.scope, monthlyUsd: r.monthly_usd }));
+}
+
+// Per-day API results. Rows are JSON arrays; `final` days are never refetched.
+export type DayTable = "cost_days" | "usage_days";
+
+export function readDays<T>(table: DayTable, start: string, end: string) {
+  const rows = getDb()
+    .prepare(`SELECT date, rows, final FROM ${table} WHERE date >= ? AND date <= ?`)
+    .all(start, end) as { date: string; rows: string; final: number }[];
+  return new Map(rows.map((r) => [r.date, { rows: JSON.parse(r.rows) as T[], final: r.final === 1 }]));
+}
+
+export function writeDays<T>(table: DayTable, days: { date: string; rows: T[]; final: boolean }[]) {
+  const conn = getDb();
+  const upsert = conn.prepare(
+    `INSERT INTO ${table} (date, rows, final) VALUES (?, ?, ?)
+     ON CONFLICT(date) DO UPDATE SET rows = excluded.rows, final = excluded.final`
+  );
+  conn.transaction((items: typeof days) => {
+    for (const d of items) upsert.run(d.date, JSON.stringify(d.rows), d.final ? 1 : 0);
+  })(days);
 }
 
 // Replaces all budgets; a budget of 0 or less removes that scope.

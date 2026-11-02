@@ -1,11 +1,11 @@
-export type Preset = "7d" | "30d" | "mtd" | "last-month" | "90d" | "custom";
+export type Preset = "7d" | "30d" | "mtd" | "last-month" | "12m" | "custom";
 
 export const PRESETS: { value: Exclude<Preset, "custom">; label: string }[] = [
   { value: "7d", label: "7D" },
   { value: "30d", label: "30D" },
   { value: "mtd", label: "This month" },
   { value: "last-month", label: "Last month" },
-  { value: "90d", label: "90D" },
+  { value: "12m", label: "12M" },
 ];
 
 const iso = (d: Date) => d.toISOString().slice(0, 10);
@@ -20,8 +20,8 @@ export function presetRange(preset: Exclude<Preset, "custom">): { start: string;
       return { start: daysAgo(6), end: iso(today) };
     case "30d":
       return { start: daysAgo(29), end: iso(today) };
-    case "90d":
-      return { start: daysAgo(89), end: iso(today) };
+    case "12m":
+      return { start: iso(new Date(Date.UTC(today.getUTCFullYear() - 1, today.getUTCMonth(), today.getUTCDate() + 1))), end: iso(today) };
     case "mtd":
       return { start: iso(new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), 1))), end: iso(today) };
     case "last-month":

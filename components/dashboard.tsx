@@ -25,7 +25,7 @@ import {
   filterByProjects,
   rankIds,
 } from "@/lib/derive";
-import { presetRange, type Preset } from "@/lib/ranges";
+import { PRESETS, presetRange, type Preset } from "@/lib/ranges";
 import type { DashboardData } from "@/lib/types";
 
 const STORAGE_KEY = "oad:view";
@@ -37,6 +37,8 @@ function loadView(): View {
   try {
     const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "null") as View | null;
     if (!saved) return fallback;
+    // A preset removed in a later release (e.g. "90d") falls back to the default.
+    if (saved.preset !== "custom" && !PRESETS.some((p) => p.value === saved.preset)) return fallback;
     // Presets are recomputed so "30D" always means the last 30 days from today.
     return saved.preset === "custom" ? saved : { ...saved, ...presetRange(saved.preset) };
   } catch {

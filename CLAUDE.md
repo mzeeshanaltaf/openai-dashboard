@@ -53,8 +53,12 @@ browser ──► proxy.ts (session check) ──► app/api/dashboard ──►
   pagination, keeps an in-memory **5-minute cache** per URL (`refresh=1` bypasses it), and retries on 429.
 - **`lib/line-item.ts`** parses cost line items such as `"flex | gpt-6-luna, cache writes - 12hr"` into
   `{ model, kind, tier }`.
-- **`lib/db.ts`** stores SQLite at `$DATA_DIR/dashboard.db` with two tables: `credit_grants` and `budgets`
-  (scope = `"total"` or a project id).
+- **`lib/db.ts`** stores SQLite at `$DATA_DIR/dashboard.db`: `credit_grants`, `budgets` (scope = `"total"` or a
+  project id), and the per-day API caches `cost_days` / `usage_days`.
+- **`lib/history.ts`** serves cost and usage rows from `cost_days` / `usage_days`, fetching only missing days.
+  Days older than 2 UTC days are stored as `final` and never refetched; today and yesterday are refetched each
+  time (through the 5-minute memory cache). Balance and month-to-date are summed from these same cost rows.
+  Costs before OpenAI's `api_key_id` grouping cutoff (~2025-12-06) come back with `apiKeyId = null`.
 - **`lib/auth.ts`** signs the session cookie with HMAC-SHA256 via Web Crypto (cookie `oad_session`, 30 days).
   `app/api/login` accepts a **plain HTML form post** (it works without JS) and is rate-limited per IP.
 
