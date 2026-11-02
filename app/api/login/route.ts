@@ -20,7 +20,8 @@ function rateLimited(ip: string) {
 
 // Accepts a plain HTML form post so login works even without client-side JS.
 export async function POST(request: NextRequest) {
-  const redirectTo = (path: string) => NextResponse.redirect(new URL(path, request.url), 303);
+  // Relative Location: behind a reverse proxy request.url is the container's bind address.
+  const redirectTo = (path: string) => new NextResponse(null, { status: 303, headers: { Location: path } });
 
   const ip = request.headers.get("x-forwarded-for")?.split(",")[0].trim() || "local";
   if (rateLimited(ip)) return redirectTo("/login?error=rate");
