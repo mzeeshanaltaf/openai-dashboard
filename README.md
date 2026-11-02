@@ -1,36 +1,43 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# OpenAI Usage Dashboard
 
-## Getting Started
+One page for everything the OpenAI platform spreads across several screens: remaining balance, month-to-date spend with a forecast, daily spend by project or model, per-project and per-API-key breakdowns, monthly budgets with alerts, and CSV export.
 
-First, run the development server:
+Data comes live from OpenAI's Admin API (`/v1/organization/costs`, `/usage/*`, `/projects`, `/projects/{id}/api_keys`). Responses are cached in memory for 5 minutes; the refresh button bypasses the cache.
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+## Remaining balance
+
+OpenAI does not return credit balance or grants to API keys (those endpoints require a browser session). Instead, record each credit top-up in **Credits & budgets** (gear icon). The dashboard shows:
+
+```
+remaining = sum(active top-ups) − actual spend (Costs API) since the earliest active top-up
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Top-ups with a past expiry date are excluded. Top-ups and budgets are stored in SQLite at `$DATA_DIR/dashboard.db`.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Environment
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+| Variable | Purpose |
+|---|---|
+| `OPENAI_ADMIN_KEY` | Organization Admin API key (server-side only) |
+| `DASHBOARD_PASSWORD` | Password for the login page |
+| `SESSION_SECRET` | Random string (32+ bytes) used to sign the session cookie |
+| `DATA_DIR` | Directory for the SQLite file (`./data` locally, `/data` in Docker) |
 
-## Learn More
+## Local development
 
-To learn more about Next.js, take a look at the following resources:
+```bash
+npm install
+npm run dev
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Open http://localhost:3000 and sign in with `DASHBOARD_PASSWORD`.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Deployment (Docker / Coolify)
 
-## Deploy on Vercel
+The `Dockerfile` builds a standalone Next.js server on port 3000. Mount a persistent volume at `/data` so credit top-ups and budgets survive redeploys, and set the four variables above as runtime environment variables.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Notes
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- All dates are UTC days, matching OpenAI's billing buckets.
+- Every page and API route except `/login` sits behind the password (`proxy.ts`); login attempts are rate-limited per IP.
+- Series colors follow the entity: the top 7 projects or models by spend in the selected range get fixed colors, and the rest fold into "Other".
